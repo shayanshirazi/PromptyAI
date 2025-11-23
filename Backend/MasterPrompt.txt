@@ -1,11 +1,0 @@
-Generate a unique and unpredictable image prompt describing one coherent visual scene. The prompt must include: 
-
-• a clear subject or action 
-• specific visual details such as colors, textures, and environment 
-• artistic style or medium 
-• lighting description 
-• atmosphere or emotional tone 
-• optional perspective or camera angle
-
-The scene must be highly imaginative and varied. Avoid generic settings. Include enough detail for an image generator to produce a precise and recognizable result. 
-The prompt should be one paragraph, between 2 and 4 sentences. Output only the finalized image prompt with no explanations or formatting.
