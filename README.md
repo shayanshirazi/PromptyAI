@@ -1,4 +1,4 @@
-# PromptyAI
+# Prompty AI: Gamified Prompt Engineering
 
 ## Inspiration  
 AI has exploded in use over the past few years, reshaping everything from daily routines to entire industries. Yet most people still don’t know how to speak to these systems well enough to get great results. Learning prompt engineering is becoming as essential as basic computer literacy. **Prompty AI** tackles this gap by turning prompt mastery into an interactive, engaging game that helps anyone build real skill through practice and play.
