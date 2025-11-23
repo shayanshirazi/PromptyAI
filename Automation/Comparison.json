@@ -1,0 +1,551 @@
+{
+  "name": "Shayan HW12 (2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-prompt",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -112,
+        0
+      ],
+      "id": "a6e2a65e-c00d-4e52-a24b-357c317d9b9e",
+      "name": "Webhook",
+      "webhookId": "d91477e2-21c0-41ec-a452-3e95c1a87a40"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      user_prompt: $json.body.prompt,\n      challenge_image: $json.body.challenge_image,\n      aspect_ratio: \"1:1\"\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        0
+      ],
+      "id": "a4037a4b-652e-466a-b90a-e64697bc33b8",
+      "name": "Extract Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.user_prompt }}"
+            },
+            {
+              "name": "aspect_ratio",
+              "value": "1:1"
+            },
+            {
+              "name": "width",
+              "value": "512"
+            },
+            {
+              "name": "height",
+              "value": "512"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        432,
+        -176
+      ],
+      "id": "e4beaa2e-1ffd-4726-b8b1-0c9b0e471e42",
+      "name": "Re-create Image",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "It1sUEWTPlVCV7Xh",
+          "name": "Stability"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import base64\nimport cv2\nimport numpy as np\nfrom skimage.metrics import structural_similarity as ssim\n\ndef decode_img(b64_string):\n    try:\n        # Remove accidental whitespace, quotes, or data headers\n        clean = b64_string.strip().replace('\\n', '')\n        if clean.startswith(\"data:image\"):\n            clean = clean.split(\",\", 1)[1]\n\n        # Decode base64\n        img_bytes = base64.b64decode(clean)\n        img_array = np.frombuffer(img_bytes, dtype=np.uint8)\n\n        # Convert to image\n        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)\n        return img\n    except Exception as e:\n        raise ValueError(f\"Base64 decode failed: {e}\")\n\nuser_b64 = _data['user_image']\nchallenge_b64 = _data['challenge_image']\n\nprint(\"User b64 length:\", user_b64[:100])\nprint(\"Challenge b64 length:\", challenge_b64)\n\nuser_img = decode_img(user_b64)\nchallenge_img = decode_img(challenge_b64)\n\n# Extra checks so OpenCV doesn't explode\nif user_img is None:\n    raise ValueError(\"User image is invalid. cv2.imdecode returned None.\")\nif challenge_img is None:\n    raise ValueError(\"Challenge image is invalid. cv2.imdecode returned None.\")\n\n# Resize\nuser_img = cv2.resize(user_img, (512, 512), interpolation=cv2.INTER_AREA)\nchallenge_img = cv2.resize(challenge_img, (512, 512), interpolation=cv2.INTER_AREA)\n\n# Convert to grayscale\ngray1 = cv2.cvtColor(user_img, cv2.COLOR_BGR2GRAY)\ngray2 = cv2.cvtColor(challenge_img, cv2.COLOR_BGR2GRAY)\n\n# SSIM calculation\nscore, _ = ssim(gray1, gray2, full=True)\n\n# Clamp\nscore = max(0.0, min(1.0, float(score)))\n\noutput = {\n    \"similarity_score\": score\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -176
+      ],
+      "id": "8958b031-c6f3-495b-ae1f-791b697dc5ad",
+      "name": "Image Comparison Script"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      challenge_image: $node[\"Extract Prompt\"].json.challenge_image,\n      user_image: $node[\"Re-create Image\"].json.image,\n      user_prompt: $node[\"Extract Prompt\"].json.user_prompt\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -176
+      ],
+      "id": "cb6216b4-50bb-4823-9191-37c451134e53",
+      "name": "Extract Image"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"score\": {{ $json.similarity_score }},\n  \"status\": \"ok\"\n}\n",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1344,
+        -16
+      ],
+      "id": "65d28e09-feb5-4fda-9f3a-9b51e0cc2ac8",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "3",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "44cafa8f-33e7-4635-bcc8-57eccfb6a954",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import base64\nimport cv2\nimport numpy as np\nfrom skimage.metrics import structural_similarity as ssim\n\ndef decode_img(b64_string):\n    try:\n        # Remove accidental whitespace, quotes, or data headers\n        clean = b64_string.strip().replace('\\n', '')\n        if clean.startswith(\"data:image\"):\n            clean = clean.split(\",\", 1)[1]\n\n        # Decode base64\n        img_bytes = base64.b64decode(clean)\n        img_array = np.frombuffer(img_bytes, dtype=np.uint8)\n\n        # Convert to image\n        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)\n        return img\n    except Exception as e:\n        raise ValueError(f\"Base64 decode failed: {e}\")\n\nuser_b64 = _data['user_image']\nchallenge_b64 = _data['challenge_image']\n\nprint(\"User b64 length:\", user_b64[:100])\nprint(\"Challenge b64 length:\", challenge_b64)\n\nuser_img = decode_img(user_b64)\nchallenge_img = decode_img(challenge_b64)\n\n# Extra checks so OpenCV doesn't explode\nif user_img is None:\n    raise ValueError(\"User image is invalid. cv2.imdecode returned None.\")\nif challenge_img is None:\n    raise ValueError(\"Challenge image is invalid. cv2.imdecode returned None.\")\n\n# Resize\nuser_img = cv2.resize(user_img, (512, 512), interpolation=cv2.INTER_AREA)\nchallenge_img = cv2.resize(challenge_img, (512, 512), interpolation=cv2.INTER_AREA)\n\n# Convert to grayscale\ngray1 = cv2.cvtColor(user_img, cv2.COLOR_BGR2GRAY)\ngray2 = cv2.cvtColor(challenge_img, cv2.COLOR_BGR2GRAY)\n\n# SSIM calculation\nscore, _ = ssim(gray1, gray2, full=True)\n\n# Clamp\nscore = max(0.0, min(1.0, float(score)))\n\noutput = {\n    \"similarity_score\": score\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "7090f52f-fe05-4f7e-b190-1907ffd5c557",
+      "name": "Image2 Comparison Script"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import base64\nimport cv2\nimport numpy as np\nfrom skimage.metrics import structural_similarity as ssim\n\ndef decode_img(b64_string):\n    try:\n        # Remove accidental whitespace, quotes, or data headers\n        clean = b64_string.strip().replace('\\n', '')\n        if clean.startswith(\"data:image\"):\n            clean = clean.split(\",\", 1)[1]\n\n        # Decode base64\n        img_bytes = base64.b64decode(clean)\n        img_array = np.frombuffer(img_bytes, dtype=np.uint8)\n\n        # Convert to image\n        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)\n        return img\n    except Exception as e:\n        raise ValueError(f\"Base64 decode failed: {e}\")\n\nuser_b64 = _data['user_image']\nchallenge_b64 = _data['challenge_image']\n\nprint(\"User b64 length:\", user_b64[:100])\nprint(\"Challenge b64 length:\", challenge_b64)\n\nuser_img = decode_img(user_b64)\nchallenge_img = decode_img(challenge_b64)\n\n# Extra checks so OpenCV doesn't explode\nif user_img is None:\n    raise ValueError(\"User image is invalid. cv2.imdecode returned None.\")\nif challenge_img is None:\n    raise ValueError(\"Challenge image is invalid. cv2.imdecode returned None.\")\n\n# Resize\nuser_img = cv2.resize(user_img, (512, 512), interpolation=cv2.INTER_AREA)\nchallenge_img = cv2.resize(challenge_img, (512, 512), interpolation=cv2.INTER_AREA)\n\n# Convert to grayscale\ngray1 = cv2.cvtColor(user_img, cv2.COLOR_BGR2GRAY)\ngray2 = cv2.cvtColor(challenge_img, cv2.COLOR_BGR2GRAY)\n\n# SSIM calculation\nscore, _ = ssim(gray1, gray2, full=True)\n\n# Clamp\nscore = max(0.0, min(1.0, float(score)))\n\noutput = {\n    \"similarity_score\": score\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        176
+      ],
+      "id": "e7ac95e0-1a5b-4321-a80a-5cb5dde2c9fc",
+      "name": "Image3 Comparison Script"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.user_prompt }}"
+            },
+            {
+              "name": "aspect_ratio",
+              "value": "1:1"
+            },
+            {
+              "name": "width",
+              "value": "512"
+            },
+            {
+              "name": "height",
+              "value": "512"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        432,
+        0
+      ],
+      "id": "46a6f2f7-67a2-4c02-a815-7a5185484a91",
+      "name": "Re-create Image2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "It1sUEWTPlVCV7Xh",
+          "name": "Stability"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.user_prompt }}"
+            },
+            {
+              "name": "aspect_ratio",
+              "value": "1:1"
+            },
+            {
+              "name": "width",
+              "value": "512"
+            },
+            {
+              "name": "height",
+              "value": "512"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        432,
+        176
+      ],
+      "id": "84158fdb-aff2-44ea-824a-aad7bdb4fbe0",
+      "name": "Re-create Image3",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "It1sUEWTPlVCV7Xh",
+          "name": "Stability"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      challenge_image: $node[\"Extract Prompt\"].json.challenge_image,\n      user_image: $node[\"Re-create Image2\"].json.image,\n      user_prompt: $node[\"Extract Prompt\"].json.user_prompt\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        0
+      ],
+      "id": "9138e7ae-4533-4b98-9162-ee8202ae4aef",
+      "name": "Extract Image2"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      challenge_image: $node[\"Extract Prompt\"].json.challenge_image,\n      user_image: $node[\"Re-create Image3\"].json.image,\n      user_prompt: $node[\"Extract Prompt\"].json.user_prompt\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        176
+      ],
+      "id": "e7dc68c0-d454-49b5-a5e2-c417c4998d62",
+      "name": "Extract Image3"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1008,
+        -32
+      ],
+      "id": "bcbe7449-bec8-4aef-a29d-764d3173b6c5",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "# Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor item in _input.all():\n  item.json.myNewField = 1\nreturn _input.all()"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        -16
+      ],
+      "id": "49e50cf2-610a-43aa-a838-4117c9c2a85d",
+      "name": "Score Average"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Prompt": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-create Image": {
+      "main": [
+        [
+          {
+            "node": "Extract Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image": {
+      "main": [
+        [
+          {
+            "node": "Image Comparison Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image Comparison Script": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Re-create Image2": {
+      "main": [
+        [
+          {
+            "node": "Extract Image2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-create Image3": {
+      "main": [
+        [
+          {
+            "node": "Extract Image3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image2": {
+      "main": [
+        [
+          {
+            "node": "Image2 Comparison Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image3": {
+      "main": [
+        [
+          {
+            "node": "Image3 Comparison Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Re-create Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Re-create Image2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Re-create Image3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image2 Comparison Script": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Image3 Comparison Script": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Score Average",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Average": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "127d5368-12df-424a-a81f-1c1b8b82c987",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2235d9a778a8a58787f4c085c67b07ee7df02bd5afef476b1b459482ac2b7ff6"
+  },
+  "id": "PHNLy2VdaBxRT1Xr",
+  "tags": []
+}
