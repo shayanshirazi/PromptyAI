@@ -1,0 +1,211 @@
+{
+  "name": "Shayan HW12",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-challenge",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4d5c7c24-7689-46af-a53b-6f013286d01b",
+      "name": "Webhook",
+      "webhookId": "acab63f0-5ed8-43df-9eae-c729edc16d9b"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Generate a unique and unpredictable image prompt describing one coherent visual scene. The prompt must include: • a clear subject or action • specific visual details such as colors, textures, and environment • artistic style or medium • lighting description • atmosphere or emotional tone • optional perspective or camera angle\nThe scene must be highly imaginative and varied. Avoid generic settings. Include enough detail for an image generator to produce a precise and recognizable result. The prompt should be one paragraph, between 2 and 4 sentences. Output only the finalized image prompt with no explanations or formatting.\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "150ec02e-a919-43ae-b9a5-dbba4d7692a8",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ZhH2vDzvqqOaYuFx",
+          "name": "Shayan Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  prompt: $json.content.parts[0].text\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "id": "25949f8f-fd9c-4603-a813-e71ff048baf4",
+      "name": "Extract Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt }}"
+            },
+            {
+              "name": "aspect_ratio",
+              "value": "1:1"
+            },
+            {
+              "name": "width",
+              "value": "512"
+            },
+            {
+              "name": "height",
+              "value": "512"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        768,
+        0
+      ],
+      "id": "70ec3025-187a-4e1a-a8be-d64e1b9df18d",
+      "name": "Stability Generate Image",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "It1sUEWTPlVCV7Xh",
+          "name": "Stability"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"prompt\": \"={{ $node['Extract Prompt'].json.prompt }}\",\n  \"image\": \"data:image/webp;base64,{{$json.image}}\"\n}\n",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        976,
+        0
+      ],
+      "id": "217d015c-ffa2-4f66-87df-5d1541eb9620",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Extract Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Prompt": {
+      "main": [
+        [
+          {
+            "node": "Stability Generate Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stability Generate Image": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0e622e6e-abd0-4ef4-abfe-4194d3d18bfc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2235d9a778a8a58787f4c085c67b07ee7df02bd5afef476b1b459482ac2b7ff6"
+  },
+  "id": "VjdbZ2VKyOsrS1xi",
+  "tags": []
+}
